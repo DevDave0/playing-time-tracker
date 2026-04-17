@@ -1,38 +1,460 @@
-.App {
+* {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+:root {
+  --bg-dark: #0f1117;
+  --bg-card: #1a1d27;
+  --bg-card-hover: #212435;
+  --orange: #e07b39;
+  --green: #3ecf6f;
+  --grey: #6b7280;
+  --text-primary: #f0f0f0;
+  --text-muted: #8b92a5;
+  --border: rgba(255, 255, 255, 0.07);
+  --radius: 10px;
+}
+
+body {
+  background-color: var(--bg-dark);
+  color: var(--text-primary);
+  font-family: 'Inter', 'Segoe UI', system-ui, sans-serif;
+  min-height: 100vh;
+}
+
+/* ── Header ── */
+
+.app {
+  max-width: 780px;
+  margin: 0 auto;
+  padding: 24px 20px 40px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 20px 28px;
+  margin-bottom: 28px;
+}
+
+.title-group {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+
+.ball-icon {
+  font-size: 1.5rem;
+  line-height: 1;
+}
+
+h1 {
+  font-size: 1.1rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+/* ── Game Clock ── */
+
+.game-clock {
   text-align: center;
 }
 
-.App-logo {
-  height: 40vmin;
-  pointer-events: none;
+.half-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  color: var(--text-muted);
+  margin-bottom: 2px;
 }
 
-@media (prefers-reduced-motion: no-preference) {
-  .App-logo {
-    animation: App-logo-spin infinite 20s linear;
-  }
+.clock-display {
+  font-size: 2.4rem;
+  font-weight: 800;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 2px;
+  color: var(--orange);
+  line-height: 1;
 }
 
-.App-header {
-  background-color: #282c34;
-  min-height: 100vh;
+.clock-sub {
+  font-size: 0.65rem;
+  color: var(--text-muted);
+  margin-top: 4px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Controls ── */
+
+.header-controls {
   display: flex;
   flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+
+.btn-toggle {
+  padding: 10px 24px;
+  border: none;
+  border-radius: 8px;
+  font-size: 0.95rem;
+  font-weight: 700;
+  letter-spacing: 0.5px;
+  cursor: pointer;
+  transition: opacity 0.15s, transform 0.1s;
+  text-transform: uppercase;
+}
+
+.btn-toggle:hover {
+  opacity: 0.88;
+  transform: translateY(-1px);
+}
+
+.btn-toggle:active {
+  transform: translateY(0);
+}
+
+.btn-toggle.start {
+  background: var(--green);
+  color: #0a1a10;
+}
+
+.btn-toggle.stop {
+  background: #e05252;
+  color: #fff;
+}
+
+.btn-reset {
+  padding: 8px 16px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: transparent;
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  text-align: center;
+}
+
+.btn-reset:hover {
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-primary);
+}
+
+/* ── Sections ── */
+
+.player-section {
+  margin-bottom: 4px;
+}
+
+.section-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  font-weight: 600;
+  padding: 0 4px 10px;
+}
+
+.on-court-title {
+  color: var(--green);
+}
+
+.bench-title {
+  color: var(--text-muted);
+}
+
+.status-dot {
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.status-dot.green {
+  background: var(--green);
+  box-shadow: 0 0 6px var(--green);
+}
+
+.status-dot.grey {
+  background: var(--grey);
+}
+
+.player-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+/* ── Player Card ── */
+
+.player-card {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 12px 18px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  cursor: grab;
+  transition: background 0.15s, border-color 0.15s, transform 0.1s, opacity 0.15s;
+  user-select: none;
+  position: relative;
+  overflow: hidden;
+}
+
+.quota-fill {
+  position: absolute;
+  left: 0;
+  top: 0;
+  bottom: 0;
+  background: rgba(62, 207, 111, 0.18);
+  transition: width 1s linear;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.player-card > *:not(.quota-fill) {
+  position: relative;
+  z-index: 1;
+}
+
+.player-card.quota-met {
+  background: rgba(62, 207, 111, 0.15);
+  border-color: rgba(62, 207, 111, 0.35);
+}
+
+.player-name-input.quota-met-name {
+  color: var(--green);
+  font-weight: 600;
+}
+
+.player-card:hover {
+  background: var(--bg-card-hover);
+  border-color: rgba(255, 255, 255, 0.13);
+}
+
+.player-card:active {
+  cursor: grabbing;
+}
+
+.player-card.on-court {
+  border-left: 3px solid var(--green);
+}
+
+.player-card.on-bench {
+  border-left: 3px solid var(--grey);
+}
+
+.player-card.drag-over {
+  border-color: var(--orange);
+  background: rgba(224, 123, 57, 0.08);
+  transform: scale(1.015);
+}
+
+.player-card.dragging {
+  opacity: 0.4;
+}
+
+.player-card.drag-locked {
+  cursor: default;
+}
+
+/* ── Slot Badge ── */
+
+.slot-badge {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  display: flex;
   align-items: center;
   justify-content: center;
-  font-size: calc(10px + 2vmin);
-  color: white;
+  font-size: 0.75rem;
+  font-weight: 700;
+  flex-shrink: 0;
+  background: rgba(255, 255, 255, 0.07);
+  color: var(--text-muted);
 }
 
-.App-link {
-  color: #61dafb;
+.on-court .slot-badge {
+  background: rgba(62, 207, 111, 0.15);
+  color: var(--green);
 }
 
-@keyframes App-logo-spin {
-  from {
-    transform: rotate(0deg);
-  }
-  to {
-    transform: rotate(360deg);
-  }
+/* ── Player Name Input ── */
+
+.player-name-input {
+  flex: 1;
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid transparent;
+  color: var(--text-primary);
+  font-size: 0.95rem;
+  font-weight: 500;
+  padding: 3px 0;
+  outline: none;
+  cursor: text;
+  transition: border-color 0.2s;
+  min-width: 0;
+}
+
+.player-name-input:hover {
+  border-bottom-color: rgba(255, 255, 255, 0.15);
+}
+
+.player-name-input:focus {
+  border-bottom-color: var(--orange);
+}
+
+.player-name-input::placeholder {
+  color: var(--text-muted);
+}
+
+/* ── Player Timer ── */
+
+.player-timer {
+  font-size: 1.15rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  min-width: 56px;
+  text-align: right;
+  flex-shrink: 0;
+  transition: color 0.3s;
+}
+
+.player-timer.active {
+  color: var(--green);
+}
+
+/* ── Divider ── */
+
+.section-divider {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin: 16px 0;
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 2px;
+  font-weight: 600;
+}
+
+.section-divider::before,
+.section-divider::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: var(--border);
+}
+
+/* ── History ── */
+
+.history-section {
+  margin-top: 24px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  overflow: hidden;
+}
+
+.history-toggle {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 20px;
+  background: var(--bg-card);
+  border: none;
+  color: var(--text-primary);
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 2px;
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+
+.history-toggle:hover {
+  background: var(--bg-card-hover);
+}
+
+.history-chevron {
+  font-size: 1rem;
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
+  display: inline-block;
+}
+
+.history-chevron.open {
+  transform: rotate(180deg);
+}
+
+.history-content {
+  background: var(--bg-card);
+  border-top: 1px solid var(--border);
+  padding: 20px;
+}
+
+
+.history-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.875rem;
+}
+
+.history-table th {
+  text-align: left;
+  color: var(--text-muted);
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 1.5px;
+  font-weight: 600;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--border);
+}
+
+.history-table th:last-child {
+  text-align: right;
+}
+
+.history-table td {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--border);
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.history-table td:last-child {
+  text-align: right;
+  font-weight: 600;
+}
+
+.history-table tr:last-child td {
+  border-bottom: none;
+}
+
+.history-table td.cell-quota-met {
+  color: var(--green);
+}
+
+/* ── Bottom Controls ── */
+
+.bottom-controls {
+  display: flex;
+  justify-content: center;
+  margin-top: 32px;
+  padding-bottom: 16px;
 }
