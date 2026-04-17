@@ -37,14 +37,28 @@ const createInitialState = (): GameState => ({
 });
 
 const formatTime = (totalSeconds: number): string => {
-  const m = Math.floor(totalSeconds / 60)
-    .toString()
-    .padStart(2, "0");
+  const m = Math.floor(totalSeconds / 60).toString().padStart(2, "0");
   const s = (totalSeconds % 60).toString().padStart(2, "0");
   return `${m}:${s}`;
 };
 
 type Section = "starters" | "bench";
+
+const PencilIcon = () => (
+  <svg viewBox="0 0 20 20" fill="currentColor" width="13" height="13">
+    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+  </svg>
+);
+
+const CheckIcon = () => (
+  <svg viewBox="0 0 20 20" fill="currentColor" width="13" height="13">
+    <path
+      fillRule="evenodd"
+      d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z"
+      clipRule="evenodd"
+    />
+  </svg>
+);
 
 export default function App() {
   const [gameState, setGameState] = useState<GameState>(createInitialState);
@@ -64,18 +78,22 @@ export default function App() {
     section: Section;
     index: number;
   } | null>(null);
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingName, setEditingName] = useState("");
+
   const dragInfo = useRef<{ section: Section; index: number } | null>(null);
   const prevHalfRef = useRef(1);
   const gameStateRef = useRef(gameState);
   gameStateRef.current = gameState;
-  const gameRunningRef = useRef(gameRunning);
-  gameRunningRef.current = gameRunning;
   const touchDragActive = useRef(false);
   const touchStartPos = useRef({ x: 0, y: 0 });
+  const touchSourceEl = useRef<HTMLElement | null>(null);
   const justDragged = useRef(false);
   const performSwapRef = useRef<
     (s: Section, si: number, t: Section, ti: number) => void
   >(() => {});
+  const setDragSourceRef = useRef(setDragSource);
+  setDragSourceRef.current = setDragSource;
 
   useEffect(() => {
     if (!gameRunning) return;
@@ -133,27 +151,37 @@ export default function App() {
       }));
     }
   }, [half]);
+
   const halfSeconds =
     gameSeconds >= HALF_DURATION ? gameSeconds - HALF_DURATION : gameSeconds;
 
-  const updateName = (section: Section, index: number, name: string) => {
-    setGameState((prev) => {
-      const arr = [...(section === "starters" ? prev.starters : prev.bench)];
-      arr[index] = { ...arr[index], name };
-      return section === "starters"
-        ? { ...prev, starters: arr }
-        : { ...prev, bench: arr };
-    });
+  // Update by id so edits survive mid-game swaps
+  const updateName = (id: number, name: string) => {
+    setGameState((prev) => ({
+      starters: prev.starters.map((p) => (p.id === id ? { ...p, name } : p)),
+      bench: prev.bench.map((p) => (p.id === id ? { ...p, name } : p)),
+    }));
+  };
+
+  const startEdit = (player: Player) => {
+    setEditingId(player.id);
+    setEditingName(player.name);
+    setSelectedCard(null);
+  };
+
+  const saveEdit = () => {
+    if (editingId !== null) {
+      updateName(editingId, editingName);
+      setEditingId(null);
+    }
   };
 
   const onDragStart = (section: Section, index: number) => {
-    if (gameRunning) return;
     dragInfo.current = { section, index };
     setDragSource({ section, index });
   };
 
   const onDragOver = (e: React.DragEvent, section: Section, index: number) => {
-    if (gameRunning) return;
     e.preventDefault();
     setDragOver({ section, index });
   };
@@ -184,12 +212,16 @@ export default function App() {
 
   useEffect(() => {
     const handleTouchMove = (e: TouchEvent) => {
-      if (!dragInfo.current || gameRunningRef.current) return;
+      if (!dragInfo.current) return;
       const touch = e.touches[0];
       const dx = touch.clientX - touchStartPos.current.x;
       const dy = touch.clientY - touchStartPos.current.y;
       if (!touchDragActive.current && Math.sqrt(dx * dx + dy * dy) < 8) return;
-      touchDragActive.current = true;
+      if (!touchDragActive.current) {
+        touchDragActive.current = true;
+        touchSourceEl.current?.classList.add("touch-lifting");
+        setDragSourceRef.current(dragInfo.current);
+      }
       e.preventDefault();
       const elements = document.elementsFromPoint(touch.clientX, touch.clientY);
       const card = elements.find(
@@ -229,10 +261,12 @@ export default function App() {
           );
         }
       }
+      touchSourceEl.current?.classList.remove("touch-lifting");
+      touchSourceEl.current = null;
       touchDragActive.current = false;
       dragInfo.current = null;
       setDragOver(null);
-      setDragSource(null);
+      setDragSourceRef.current(null);
     };
 
     document.addEventListener("touchmove", handleTouchMove, { passive: false });
@@ -254,13 +288,13 @@ export default function App() {
     setDragOver(null);
     setDragSource(null);
     const src = dragInfo.current;
-    if (!src || gameRunning) return;
+    if (!src) return;
     dragInfo.current = null;
     performSwap(src.section, src.index, targetSection, targetIndex);
   };
 
   const handleCardClick = (section: Section, index: number) => {
-    if (gameRunning || justDragged.current) return;
+    if (justDragged.current) return;
     if (!selectedCard) {
       setSelectedCard({ section, index });
       return;
@@ -285,6 +319,7 @@ export default function App() {
     setGameState(createInitialState());
     setHalfHistory([]);
     setHistoryOpen(false);
+    setEditingId(null);
     prevHalfRef.current = 1;
   };
 
@@ -348,10 +383,16 @@ export default function App() {
       dragSource?.section === section && dragSource?.index === index;
     const isSelected =
       selectedCard?.section === section && selectedCard?.index === index;
+    const isEditing = editingId === player.id;
 
     const thisHalfElapsed = player.elapsedSeconds - player.prevHalfElapsed;
     const quotaMet = thisHalfElapsed >= QUOTA_SECONDS;
     const fillPct = Math.min((thisHalfElapsed / QUOTA_SECONDS) * 100, 100);
+
+    const h1Secs =
+      halfHistory[0]?.players.find((p) => p.id === player.id)?.seconds ?? null;
+    const h2Secs =
+      halfHistory[1]?.players.find((p) => p.id === player.id)?.seconds ?? null;
 
     return (
       <div
@@ -364,19 +405,20 @@ export default function App() {
           isDragTarget ? "drag-over" : "",
           isDragging ? "dragging" : "",
           quotaMet ? "quota-met" : "",
-          gameRunning ? "drag-locked" : "",
           isSelected ? "selected" : "",
-        ].join(" ")}
-        draggable={!gameRunning}
-        onClick={() => handleCardClick(section, index)}
+        ]
+          .filter(Boolean)
+          .join(" ")}
+        draggable={!isEditing}
+        onClick={() => !isEditing && handleCardClick(section, index)}
         onTouchStart={(e) => {
-          if (gameRunning) return;
+          if (isEditing) return;
+          touchSourceEl.current = e.currentTarget as HTMLElement;
           touchStartPos.current = {
             x: e.touches[0].clientX,
             y: e.touches[0].clientY,
           };
           dragInfo.current = { section, index };
-          setDragSource({ section, index });
         }}
         onDragStart={() => onDragStart(section, index)}
         onDragOver={(e) => onDragOver(e, section, index)}
@@ -386,19 +428,78 @@ export default function App() {
       >
         <div className="quota-fill" style={{ width: `${fillPct}%` }} />
         <span className="slot-badge">{isOnCourt ? index + 1 : index + 6}</span>
-        <input
-          draggable={false}
-          className={`player-name-input${quotaMet ? " quota-met-name" : ""}`}
-          value={player.name}
-          onChange={(e) => updateName(section, index, e.target.value)}
-          onMouseDown={(e) => e.stopPropagation()}
-          placeholder="Player name"
-        />
-        <span
-          className={`player-timer${isOnCourt && gameRunning ? " active" : ""}`}
-        >
-          {formatTime(player.elapsedSeconds)}
-        </span>
+
+        {isEditing ? (
+          <>
+            <input
+              autoFocus
+              className={`player-name-input${quotaMet ? " quota-met-name" : ""}`}
+              value={editingName}
+              onChange={(e) => setEditingName(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") saveEdit();
+                if (e.key === "Escape") setEditingId(null);
+              }}
+              onClick={(e) => e.stopPropagation()}
+              onMouseDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+            />
+            <button
+              className="name-action-btn save-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                saveEdit();
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+            >
+              <CheckIcon />
+            </button>
+          </>
+        ) : (
+          <>
+            <span
+              className={`player-name-display${quotaMet ? " quota-met-name" : ""}`}
+            >
+              {player.name}
+            </span>
+            <button
+              className="name-action-btn edit-btn"
+              onClick={(e) => {
+                e.stopPropagation();
+                startEdit(player);
+              }}
+              onMouseDown={(e) => e.stopPropagation()}
+              onTouchStart={(e) => e.stopPropagation()}
+            >
+              <PencilIcon />
+            </button>
+          </>
+        )}
+
+        <div className="player-times">
+          {h1Secs !== null && (
+            <>
+              <span className="time-half">{formatTime(h1Secs)}</span>
+              <span className="time-sep">·</span>
+            </>
+          )}
+          {h2Secs !== null ? (
+            <>
+              <span className="time-half">{formatTime(h2Secs)}</span>
+              <span className="time-sep">·</span>
+              <span className="player-timer time-total">
+                {formatTime(h1Secs! + h2Secs)}
+              </span>
+            </>
+          ) : (
+            <span
+              className={`player-timer${isOnCourt && gameRunning ? " active" : ""}`}
+            >
+              {formatTime(thisHalfElapsed)}
+            </span>
+          )}
+        </div>
       </div>
     );
   };
