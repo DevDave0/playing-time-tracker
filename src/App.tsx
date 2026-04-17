@@ -60,10 +60,22 @@ export default function App() {
   } | null>(null);
   const [halfHistory, setHalfHistory] = useState<HalfRecord[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
+  const [selectedCard, setSelectedCard] = useState<{
+    section: Section;
+    index: number;
+  } | null>(null);
   const dragInfo = useRef<{ section: Section; index: number } | null>(null);
   const prevHalfRef = useRef(1);
   const gameStateRef = useRef(gameState);
   gameStateRef.current = gameState;
+  const gameRunningRef = useRef(gameRunning);
+  gameRunningRef.current = gameRunning;
+  const touchDragActive = useRef(false);
+  const touchStartPos = useRef({ x: 0, y: 0 });
+  const justDragged = useRef(false);
+  const performSwapRef = useRef<
+    (s: Section, si: number, t: Section, ti: number) => void
+  >(() => {});
 
   useEffect(() => {
     if (!gameRunning) return;
@@ -146,6 +158,93 @@ export default function App() {
     setDragOver({ section, index });
   };
 
+  const performSwap = (
+    srcSection: Section,
+    srcIndex: number,
+    targetSection: Section,
+    targetIndex: number,
+  ) => {
+    if (srcSection === targetSection && srcIndex === targetIndex) return;
+    setGameState((prev) => {
+      const s = [...prev.starters];
+      const b = [...prev.bench];
+      if (srcSection === "starters" && targetSection === "starters") {
+        [s[srcIndex], s[targetIndex]] = [s[targetIndex], s[srcIndex]];
+      } else if (srcSection === "bench" && targetSection === "bench") {
+        [b[srcIndex], b[targetIndex]] = [b[targetIndex], b[srcIndex]];
+      } else if (srcSection === "bench" && targetSection === "starters") {
+        [s[targetIndex], b[srcIndex]] = [b[srcIndex], s[targetIndex]];
+      } else {
+        [b[targetIndex], s[srcIndex]] = [s[srcIndex], b[targetIndex]];
+      }
+      return { starters: s, bench: b };
+    });
+  };
+  performSwapRef.current = performSwap;
+
+  useEffect(() => {
+    const handleTouchMove = (e: TouchEvent) => {
+      if (!dragInfo.current || gameRunningRef.current) return;
+      const touch = e.touches[0];
+      const dx = touch.clientX - touchStartPos.current.x;
+      const dy = touch.clientY - touchStartPos.current.y;
+      if (!touchDragActive.current && Math.sqrt(dx * dx + dy * dy) < 8) return;
+      touchDragActive.current = true;
+      e.preventDefault();
+      const elements = document.elementsFromPoint(touch.clientX, touch.clientY);
+      const card = elements.find(
+        (el) => (el as HTMLElement).dataset?.section,
+      ) as HTMLElement | undefined;
+      if (card) {
+        setDragOver({
+          section: card.dataset.section as Section,
+          index: parseInt(card.dataset.index!),
+        });
+      } else {
+        setDragOver(null);
+      }
+    };
+
+    const handleTouchEnd = (e: TouchEvent) => {
+      if (!dragInfo.current) return;
+      if (touchDragActive.current) {
+        justDragged.current = true;
+        setTimeout(() => {
+          justDragged.current = false;
+        }, 300);
+        const touch = e.changedTouches[0];
+        const elements = document.elementsFromPoint(
+          touch.clientX,
+          touch.clientY,
+        );
+        const card = elements.find(
+          (el) => (el as HTMLElement).dataset?.section,
+        ) as HTMLElement | undefined;
+        if (card && dragInfo.current) {
+          performSwapRef.current(
+            dragInfo.current.section,
+            dragInfo.current.index,
+            card.dataset.section as Section,
+            parseInt(card.dataset.index!),
+          );
+        }
+      }
+      touchDragActive.current = false;
+      dragInfo.current = null;
+      setDragOver(null);
+      setDragSource(null);
+    };
+
+    document.addEventListener("touchmove", handleTouchMove, { passive: false });
+    document.addEventListener("touchend", handleTouchEnd);
+    document.addEventListener("touchcancel", handleTouchEnd);
+    return () => {
+      document.removeEventListener("touchmove", handleTouchMove);
+      document.removeEventListener("touchend", handleTouchEnd);
+      document.removeEventListener("touchcancel", handleTouchEnd);
+    };
+  }, []);
+
   const onDrop = (
     e: React.DragEvent,
     targetSection: Section,
@@ -157,22 +256,21 @@ export default function App() {
     const src = dragInfo.current;
     if (!src || gameRunning) return;
     dragInfo.current = null;
-    if (src.section === targetSection && src.index === targetIndex) return;
+    performSwap(src.section, src.index, targetSection, targetIndex);
+  };
 
-    setGameState((prev) => {
-      const s = [...prev.starters];
-      const b = [...prev.bench];
-      if (src.section === "starters" && targetSection === "starters") {
-        [s[src.index], s[targetIndex]] = [s[targetIndex], s[src.index]];
-      } else if (src.section === "bench" && targetSection === "bench") {
-        [b[src.index], b[targetIndex]] = [b[targetIndex], b[src.index]];
-      } else if (src.section === "bench" && targetSection === "starters") {
-        [s[targetIndex], b[src.index]] = [b[src.index], s[targetIndex]];
-      } else {
-        [b[targetIndex], s[src.index]] = [s[src.index], b[targetIndex]];
-      }
-      return { starters: s, bench: b };
-    });
+  const handleCardClick = (section: Section, index: number) => {
+    if (gameRunning || justDragged.current) return;
+    if (!selectedCard) {
+      setSelectedCard({ section, index });
+      return;
+    }
+    if (selectedCard.section === section && selectedCard.index === index) {
+      setSelectedCard(null);
+      return;
+    }
+    performSwap(selectedCard.section, selectedCard.index, section, index);
+    setSelectedCard(null);
   };
 
   const onDragEnd = () => {
@@ -248,6 +346,8 @@ export default function App() {
       dragOver?.section === section && dragOver?.index === index;
     const isDragging =
       dragSource?.section === section && dragSource?.index === index;
+    const isSelected =
+      selectedCard?.section === section && selectedCard?.index === index;
 
     const thisHalfElapsed = player.elapsedSeconds - player.prevHalfElapsed;
     const quotaMet = thisHalfElapsed >= QUOTA_SECONDS;
@@ -256,6 +356,8 @@ export default function App() {
     return (
       <div
         key={player.id}
+        data-section={section}
+        data-index={index}
         className={[
           "player-card",
           isOnCourt ? "on-court" : "on-bench",
@@ -263,8 +365,19 @@ export default function App() {
           isDragging ? "dragging" : "",
           quotaMet ? "quota-met" : "",
           gameRunning ? "drag-locked" : "",
+          isSelected ? "selected" : "",
         ].join(" ")}
         draggable={!gameRunning}
+        onClick={() => handleCardClick(section, index)}
+        onTouchStart={(e) => {
+          if (gameRunning) return;
+          touchStartPos.current = {
+            x: e.touches[0].clientX,
+            y: e.touches[0].clientY,
+          };
+          dragInfo.current = { section, index };
+          setDragSource({ section, index });
+        }}
         onDragStart={() => onDragStart(section, index)}
         onDragOver={(e) => onDragOver(e, section, index)}
         onDragLeave={() => setDragOver(null)}
@@ -309,7 +422,7 @@ export default function App() {
             className={`btn-toggle ${gameRunning ? "stop" : "start"}`}
             onClick={() => setGameRunning((r) => !r)}
           >
-            {gameRunning ? "Stop" : "Start"}
+            {gameRunning ? "Pause" : "Start"}
           </button>
           {halfHistory.length === 2 && (
             <button className="btn-reset" onClick={reset}>
