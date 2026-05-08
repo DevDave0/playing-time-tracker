@@ -88,6 +88,8 @@ export default function App() {
   const touchDragActive = useRef(false);
   const touchStartPos = useRef({ x: 0, y: 0 });
   const touchSourceEl = useRef<HTMLElement | null>(null);
+  const ghostEl = useRef<HTMLElement | null>(null);
+  const touchOffset = useRef({ x: 0, y: 0 });
   const justDragged = useRef(false);
   const performSwapRef = useRef<
     (s: Section, si: number, t: Section, ti: number) => void
@@ -217,12 +219,45 @@ export default function App() {
       const dx = touch.clientX - touchStartPos.current.x;
       const dy = touch.clientY - touchStartPos.current.y;
       if (!touchDragActive.current && Math.sqrt(dx * dx + dy * dy) < 8) return;
+
       if (!touchDragActive.current) {
         touchDragActive.current = true;
-        touchSourceEl.current?.classList.add("touch-lifting");
-        setDragSourceRef.current(dragInfo.current);
+        const src = touchSourceEl.current;
+        if (src) {
+          // Fade out the original slot
+          src.style.opacity = "0.3";
+          // Clone it into a floating ghost that follows the finger
+          const rect = src.getBoundingClientRect();
+          const ghost = src.cloneNode(true) as HTMLElement;
+          ghost.removeAttribute("data-section");
+          ghost.removeAttribute("data-index");
+          ghost.style.cssText = [
+            "position:fixed",
+            `left:${touch.clientX - touchOffset.current.x}px`,
+            `top:${touch.clientY - touchOffset.current.y}px`,
+            `width:${rect.width}px`,
+            `height:${rect.height}px`,
+            "z-index:9999",
+            "pointer-events:none",
+            "transform:scale(1.06)",
+            "box-shadow:0 16px 48px rgba(0,0,0,0.55),0 4px 16px rgba(0,0,0,0.35)",
+            "opacity:0.96",
+            "margin:0",
+            "transition:transform 0.12s ease,box-shadow 0.12s ease",
+          ].join(";");
+          document.body.appendChild(ghost);
+          ghostEl.current = ghost;
+        }
       }
+
       e.preventDefault();
+
+      // Slide ghost under finger
+      if (ghostEl.current) {
+        ghostEl.current.style.left = `${touch.clientX - touchOffset.current.x}px`;
+        ghostEl.current.style.top = `${touch.clientY - touchOffset.current.y}px`;
+      }
+
       const elements = document.elementsFromPoint(touch.clientX, touch.clientY);
       const card = elements.find(
         (el) => (el as HTMLElement).dataset?.section,
@@ -235,6 +270,20 @@ export default function App() {
       } else {
         setDragOver(null);
       }
+    };
+
+    const cleanup = () => {
+      if (touchSourceEl.current) {
+        touchSourceEl.current.style.opacity = "";
+        touchSourceEl.current = null;
+      }
+      if (ghostEl.current) {
+        ghostEl.current.remove();
+        ghostEl.current = null;
+      }
+      touchDragActive.current = false;
+      dragInfo.current = null;
+      setDragOver(null);
     };
 
     const handleTouchEnd = (e: TouchEvent) => {
@@ -261,21 +310,16 @@ export default function App() {
           );
         }
       }
-      touchSourceEl.current?.classList.remove("touch-lifting");
-      touchSourceEl.current = null;
-      touchDragActive.current = false;
-      dragInfo.current = null;
-      setDragOver(null);
-      setDragSourceRef.current(null);
+      cleanup();
     };
 
     document.addEventListener("touchmove", handleTouchMove, { passive: false });
     document.addEventListener("touchend", handleTouchEnd);
-    document.addEventListener("touchcancel", handleTouchEnd);
+    document.addEventListener("touchcancel", cleanup);
     return () => {
       document.removeEventListener("touchmove", handleTouchMove);
       document.removeEventListener("touchend", handleTouchEnd);
-      document.removeEventListener("touchcancel", handleTouchEnd);
+      document.removeEventListener("touchcancel", cleanup);
     };
   }, []);
 
@@ -413,10 +457,16 @@ export default function App() {
         onClick={() => !isEditing && handleCardClick(section, index)}
         onTouchStart={(e) => {
           if (isEditing) return;
-          touchSourceEl.current = e.currentTarget as HTMLElement;
+          const el = e.currentTarget as HTMLElement;
+          const rect = el.getBoundingClientRect();
+          touchSourceEl.current = el;
           touchStartPos.current = {
             x: e.touches[0].clientX,
             y: e.touches[0].clientY,
+          };
+          touchOffset.current = {
+            x: e.touches[0].clientX - rect.left,
+            y: e.touches[0].clientY - rect.top,
           };
           dragInfo.current = { section, index };
         }}
